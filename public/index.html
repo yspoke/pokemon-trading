@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pokemon TCG Pocket Trading</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login Page -->
+  <div id="login-page" class="login-container">
+    <div class="login-box">
+      <h1>🎴 Pokemon Trade</h1>
+      <p>Trade cards with your friends!</p>
+      <input type="text" id="username" placeholder="Username">
+      <input type="password" id="password" placeholder="Password">
+      <button onclick="login()">Login</button>
+      <p id="login-error" class="error-message"></p>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app-page" class="app-container" style="display: none;">
+    <header>
+      <h1>🎴 Pokemon TCG Pocket Trading</h1>
+      <div class="user-info">
+        <span>Welcome, <strong id="display-name"></strong></span>
+        <button id="logout-btn" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="active" onclick="showTab('my-cards')">📦 My Cards</button>
+      <button onclick="showTab('friends-cards')">👥 Friends Cards</button>
+      <button onclick="showTab('matches')">
+        🔄 Matches
+        <span id="match-count" class="notification-badge" style="display: none;">0</span>
+      </button>
+    </nav>
+
+    <!-- My Cards Tab -->
+    <div id="my-cards-tab" class="tab-content active">
+      <h2>📦 My Cards</h2>
+      <p class="tab-description">Search and mark the cards you have available for trade.</p>
+      
+      <!-- My Cards Summary -->
+      <div class="section-box green-box">
+        <h3>✅ Cards I Have (<span id="my-cards-count">0</span>)</h3>
+        <div id="my-cards-list"></div>
+      </div>
+
+      <!-- Search Section -->
+      <div class="section-box">
+        <h3>🔍 Search Cards to Add</h3>
+        
+        <!-- Search Box -->
+        <div class="search-header">
+          <div class="search-box">
+            <input type="text" id="card-search" placeholder="Search by Pokemon name...">
+            <button id="search-btn">Search</button>
+          </div>
+          <button class="sync-btn" onclick="syncCards()">🔄 Sync DB</button>
+        </div>
+
+        <!-- Expansion Filter -->
+        <div class="filter-group">
+          <h4>📦 Expansion:</h4>
+          <div id="expansion-list" class="filter-options"></div>
+        </div>
+
+        <!-- Rarity Filter -->
+        <div class="filter-group">
+          <h4>⭐ Rarity:</h4>
+          <div id="rarity-list" class="filter-options">
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="" checked onchange="onFilterChange()">
+              <span>All</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="◊" onchange="onFilterChange()">
+              <span>◊</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="◊◊" onchange="onFilterChange()">
+              <span>◊◊</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="◊◊◊" onchange="onFilterChange()">
+              <span>◊◊◊</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="◊◊◊◊" onchange="onFilterChange()">
+              <span>◊◊◊◊</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="☆" onchange="onFilterChange()">
+              <span>☆</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="☆☆" onchange="onFilterChange()">
+              <span>☆☆</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="☆☆☆" onchange="onFilterChange()">
+              <span>☆☆☆</span>
+            </label>
+            <label class="filter-option">
+              <input type="radio" name="rarity" value="♛" onchange="onFilterChange()">
+              <span>♛</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Search Results -->
+        <div id="search-results-section" style="display: none;">
+          <h4>Results:</h4>
+          <div id="search-results"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friends Cards Tab -->
+    <div id="friends-cards-tab" class="tab-content">
+      <h2>👥 Friends Cards</h2>
+      <p class="tab-description">See what your friends have. Click "I Want This" to create a trade match!</p>
+      <div id="friends-cards-list"></div>
+    </div>
+
+    <!-- Matches Tab -->
+    <div id="matches-tab" class="tab-content">
+      <h2>🔄 Trade Matches</h2>
+      <p class="tab-description">Cards you want that your friends have!</p>
+      <div id="matches-list"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
