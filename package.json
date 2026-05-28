@@ -1,15 +1,19 @@
 {
-  "name": "pokemon-trade",
+  "name": "pokemon-trading",
   "version": "1.0.0",
-  "description": "Pokemon card trading among friends",
+  "description": "Pokemon TCG Pocket Trading App",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "sql.js": "^1.10.3",
     "cors": "^2.8.5",
-    "jsonwebtoken": "^9.0.2"
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "sql.js": "^1.8.0"
   }
 }
