@@ -274,7 +274,12 @@ async function updateQuantity(cardId, status, newQuantity) {
     });
 
     if (res.ok) {
+      // Reload all relevant tabs
       loadMyCards();
+      loadFriendsCards();
+      loadMatches();
+      loadPossibleTrades();
+      loadPendingTrades();
     } else {
       var data = await res.json();
       alert(data.error || 'Failed to update quantity');
@@ -446,7 +451,6 @@ async function addWantedCard(cardId, cardName, cardImage, cardSet, cardRarity) {
 }
 
 // Remove card
-// Remove card
 async function removeCard(cardId) {
   if (!confirm('Remove this card?')) return;
 
@@ -456,8 +460,12 @@ async function removeCard(cardId) {
       headers: { 'Authorization': 'Bearer ' + token }
     });
 
-    // Just reload regardless - the delete worked if we got here
+    // Reload all relevant tabs
     loadMyCards();
+    loadFriendsCards();
+    loadMatches();
+    loadPossibleTrades();
+    loadPendingTrades();
   } catch (err) {
     console.error('Error removing card:', err);
     loadMyCards();
@@ -474,8 +482,12 @@ async function removeWantedCard(cardId) {
       headers: { 'Authorization': 'Bearer ' + token }
     });
 
-    // Just reload regardless
+    // Reload all relevant tabs
     loadMyCards();
+    loadFriendsCards();
+    loadMatches();
+    loadPossibleTrades();
+    loadPendingTrades();
   } catch (err) {
     console.error('Error removing card:', err);
     loadMyCards();
@@ -629,18 +641,17 @@ async function cancelWant(cardId, friendId) {
       })
     });
 
-    // Just reload regardless of response - no alert needed
+    // Reload all relevant tabs
+    loadMyCards();
     loadFriendsCards();
     loadMatches();
-    loadMyCards();
+    loadPossibleTrades();
+    loadPendingTrades();
   } catch (err) {
-    // Silently reload
+    console.error('Error cancelling want:', err);
     loadFriendsCards();
-    loadMatches();
-    loadMyCards();
   }
 }
-
 // I have a card that a friend wants
 async function iHaveThis(cardId, cardName, cardImage, cardSet, cardRarity, friendId) {
   try {

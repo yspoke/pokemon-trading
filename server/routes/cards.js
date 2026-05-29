@@ -66,20 +66,46 @@ router.post('/update-quantity', authenticateToken, (req, res) => {
 
   try {
     if (quantity <= 0) {
-      // Delete the card if quantity is 0 or less
-      prepare(`
-        DELETE FROM user_cards WHERE user_id = ? AND card_id = ? AND status = ?
-      `).run(req.user.id, cardId, status);
-      return res.json({ success: true, deleted: true });
+      // Get the card first to get its database id
+      const card = prepare(`
+        SELECT id FROM user_cards WHERE user_id = ? AND card_id = ? AND status = ?
+      `).get(req.user.id, cardId, status);
+
+      if (card) {
+        // Delete the card
+        prepare(`
+          DELETE FROM user_cards WHERE id = ?
+        `).run(card.id);
+
+        // Clean up matches based on status
+        if (status === 'wanted') {
+          // Remove matches where I wanted this card
+          prepare(`
+            DELETE FROM matches 
+            WHERE user1_id = ? AND user1_card_id = ? AND status = 'pending'
+          `).run(req.user.id, cardId);
+        } else if (status === 'available') {
+          // Remove matches where others wanted my card
+          prepare(`
+            DELETE FROM matches 
+            WHERE user2_id = ? AND user1_card_id = ? AND status = 'pending'
+          `).run(req.user.id, cardId);
+        }
+      }
+
+      return res.json({ success: true, removed: true });
     }
 
+    // Update quantity
     prepare(`
-      UPDATE user_cards SET quantity = ? WHERE user_id = ? AND card_id = ? AND status = ?
+      UPDATE user_cards SET quantity = ? 
+      WHERE user_id = ? AND card_id = ? AND status = ?
     `).run(quantity, req.user.id, cardId, status);
 
-    res.json({ success: true, quantity: quantity });
+    res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error updating quantity:', err);
+    res.status(500).json({ error: 'Failed to update quantity' });
   }
 });
 
@@ -204,51 +230,62 @@ router.post('/i-have', authenticateToken, (req, res) => {
   }
 });
 
-// Remove a card - also removes related matches and trades
+// Remove card from collection
 router.delete('/remove/:id', authenticateToken, (req, res) => {
-  // First get the card info
-  const card = prepare(`
-    SELECT * FROM user_cards WHERE id = ? AND user_id = ?
-  `).get(req.params.id, req.user.id);
+  const cardId = req.params.id;
 
-  if (!card) {
-    return res.status(404).json({ error: 'Card not found' });
+  try {
+    // Get card info first
+    const card = prepare(`
+      SELECT * FROM user_cards WHERE id = ? AND user_id = ?
+    `).get(cardId, req.user.id);
+
+    if (!card) {
+      return res.status(404).json({ error: 'Card not found' });
+    }
+
+    // Remove the card
+    prepare(`
+      DELETE FROM user_cards WHERE id = ? AND user_id = ?
+    `).run(cardId, req.user.id);
+
+    // If it was an available card, clean up matches where others wanted it
+    if (card.status === 'available') {
+      prepare(`
+        DELETE FROM matches 
+        WHERE user2_id = ? AND user1_card_id = ? AND status = 'pending'
+      `).run(req.user.id, card.card_id);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error removing card:', err);
+    res.status(500).json({ error: 'Failed to remove card' });
   }
-
-  // Delete related matches where this user has this card
-  prepare(`
-    DELETE FROM matches 
-    WHERE (user1_id = ? AND user1_card_id = ?) 
-       OR (user2_id = ? AND user2_card_id = ?)
-  `).run(req.user.id, card.card_id, req.user.id, card.card_id);
-
-  // Delete related trades where this user has this card
-  prepare(`
-    DELETE FROM trades 
-    WHERE ((user1_id = ? AND user1_card_id = ?) 
-       OR (user2_id = ? AND user2_card_id = ?))
-       AND status = 'pending'
-  `).run(req.user.id, card.card_id, req.user.id, card.card_id);
-
-  // Delete the card
-  prepare(`
-    DELETE FROM user_cards WHERE id = ?
-  `).run(req.params.id);
-
-  res.json({ success: true });
 });
 
-// Remove a wanted card
+// Remove wanted card
 router.delete('/remove-wanted/:cardId', authenticateToken, (req, res) => {
-  const result = prepare(`
-    DELETE FROM user_cards WHERE user_id = ? AND card_id = ? AND status = 'wanted'
-  `).run(req.user.id, req.params.cardId);
+  const cardId = req.params.cardId;
 
-  if (result.changes === 0) {
-    return res.status(404).json({ error: 'Card not found' });
+  try {
+    // Remove the card from wanted list
+    prepare(`
+      DELETE FROM user_cards 
+      WHERE user_id = ? AND card_id = ? AND status = 'wanted'
+    `).run(req.user.id, cardId);
+
+    // Also remove any matches where I wanted this card
+    prepare(`
+      DELETE FROM matches 
+      WHERE user1_id = ? AND user1_card_id = ? AND status = 'pending'
+    `).run(req.user.id, cardId);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error removing wanted card:', err);
+    res.status(500).json({ error: 'Failed to remove card' });
   }
-
-  res.json({ success: true });
 });
 
 module.exports = router;

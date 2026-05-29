@@ -3,219 +3,454 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin - Pokemon Trade</title>
+  <title>Admin - Pokemon TCG Trading</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      min-height: 100vh;
-      color: #fff;
-      padding: 40px 20px;
-    }
-    .container {
-      max-width: 600px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
       margin: 0 auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #eee;
     }
-    h1 { margin-bottom: 30px; text-align: center; }
+    h1 { color: #ffd700; }
+    h2 { color: #4fc3f7; margin-top: 30px; }
     .card {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 15px;
-      padding: 25px;
-      margin-bottom: 20px;
+      background: #16213e;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 15px 0;
     }
-    h2 { margin-bottom: 20px; font-size: 1.2rem; }
-    input {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 10px;
-      border: none;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.1);
-      color: #fff;
-      font-size: 1rem;
-    }
-    input::placeholder { color: rgba(255, 255, 255, 0.5); }
     button {
-      width: 100%;
-      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
       border: none;
+      padding: 12px 24px;
       border-radius: 8px;
-      background: linear-gradient(45deg, #4ecdc4, #44a08d);
-      color: #fff;
-      font-weight: bold;
       cursor: pointer;
-      font-size: 1rem;
+      font-size: 16px;
+      margin: 5px;
     }
-    button:hover { transform: scale(1.02); }
-    .result {
-      margin-top: 15px;
+    button:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    button.danger {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    }
+    button.success {
+      background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    }
+    button.small {
+      padding: 8px 16px;
+      font-size: 14px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+    }
+    .stat-box {
+      background: #0f3460;
       padding: 15px;
-      background: rgba(0, 0, 0, 0.3);
       border-radius: 8px;
-      font-family: monospace;
-      font-size: 0.9rem;
-      white-space: pre-wrap;
-      word-break: break-all;
+      text-align: center;
     }
-    .success { border-left: 4px solid #4ecdc4; }
-    .error { border-left: 4px solid #ff6b6b; }
-    .user-list { margin-top: 15px; }
-    .user-item {
-      background: rgba(255, 255, 255, 0.05);
-      padding: 10px 15px;
+    .stat-box .number {
+      font-size: 2em;
+      color: #ffd700;
+    }
+    .stat-box .label {
+      color: #aaa;
+    }
+    #message {
+      padding: 15px;
       border-radius: 8px;
-      margin-bottom: 8px;
+      margin: 15px 0;
+      display: none;
+    }
+    #message.success {
+      background: #27ae60;
+      display: block;
+    }
+    #message.error {
+      background: #e74c3c;
+      display: block;
+    }
+    input[type="file"] {
+      margin: 10px 0;
+    }
+    input[type="text"], input[type="password"] {
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #333;
+      background: #0f3460;
+      color: #eee;
+      margin: 5px;
+      width: 150px;
+    }
+    pre {
+      background: #0f3460;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      max-height: 300px;
+    }
+    a {
+      color: #4fc3f7;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    th {
+      background: #0f3460;
+      color: #4fc3f7;
+    }
+    tr:hover {
+      background: #0f3460;
+    }
+    .user-form {
       display: flex;
-      justify-content: space-between;
+      flex-wrap: wrap;
       align-items: center;
-    }
-    .delete-btn {
-      width: auto;
-      padding: 5px 15px;
-      background: #ff6b6b;
-      font-size: 0.8rem;
+      gap: 10px;
+      margin-top: 15px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🔧 Admin Panel</h1>
+  <h1>🔧 Admin Panel</h1>
+  <p><a href="/">← Back to App</a></p>
 
-    <!-- Admin Key -->
-    <div class="card">
-      <h2>🔑 Admin Key</h2>
-      <input type="password" id="admin-key" placeholder="Enter admin key">
+  <div id="message"></div>
+
+  <h2>📊 Statistics</h2>
+  <div class="card">
+    <div class="stats" id="stats">
+      <div class="stat-box">
+        <div class="number">-</div>
+        <div class="label">Users</div>
+      </div>
+      <div class="stat-box">
+        <div class="number">-</div>
+        <div class="label">Cards</div>
+      </div>
+      <div class="stat-box">
+        <div class="number">-</div>
+        <div class="label">Pending Matches</div>
+      </div>
+      <div class="stat-box">
+        <div class="number">-</div>
+        <div class="label">Trades</div>
+      </div>
     </div>
+    <br>
+    <button onclick="loadStats()">🔄 Refresh Stats</button>
+  </div>
 
-    <!-- Add User -->
-    <div class="card">
-      <h2>➕ Add New User</h2>
+  <h2>👥 User Management</h2>
+  <div class="card">
+    <h3>Current Users</h3>
+    <table id="users-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Username</th>
+          <th>Display Name</th>
+          <th>Cards</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="users-list">
+        <tr><td colspan="5">Loading...</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Add New User</h3>
+    <div class="user-form">
       <input type="text" id="new-username" placeholder="Username">
       <input type="password" id="new-password" placeholder="Password">
       <input type="text" id="new-displayname" placeholder="Display Name">
-      <button onclick="addUser()">Add User</button>
-      <div id="add-result"></div>
-    </div>
-
-    <!-- List Users -->
-    <div class="card">
-      <h2>👥 Current Users</h2>
-      <button onclick="listUsers()">Refresh User List</button>
-      <div id="user-list" class="user-list"></div>
+      <button class="success" onclick="addUser()">➕ Add User</button>
     </div>
   </div>
 
-  <script>
-    const API_URL = window.location.origin;
+  <h2>💾 Backup Data</h2>
+  <div class="card">
+    <p>Download all card collections, matches, and trades as a JSON file.</p>
+    <button class="success" onclick="downloadBackup()">📥 Download Backup</button>
+  </div>
 
-    function getAdminKey() {
-      return document.getElementById('admin-key').value;
+  <h2>📤 Restore Data</h2>
+  <div class="card">
+    <p>Upload a backup file to restore data. This will replace all current data!</p>
+    <input type="file" id="restore-file" accept=".json">
+    <br>
+    <button class="danger" onclick="restoreBackup()">📤 Restore from Backup</button>
+  </div>
+
+  <h2>👀 Preview Backup</h2>
+  <div class="card">
+    <button onclick="previewBackup()">👁️ Preview Current Data</button>
+    <pre id="preview" style="display:none;"></pre>
+  </div>
+
+  <h2>🗑️ Danger Zone</h2>
+  <div class="card">
+    <p>Clear all cards, matches, and trades (keeps users).</p>
+    <button class="danger" onclick="clearAllData()">🗑️ Clear All Data</button>
+  </div>
+
+  <script>
+    var token = localStorage.getItem('token');
+
+    if (!token) {
+      alert('Please login first');
+      window.location.href = '/';
+    }
+
+    // Load everything on page load
+    loadStats();
+    loadUsers();
+
+    async function loadStats() {
+      try {
+        var res = await fetch('/api/admin/stats', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var stats = await res.json();
+
+        document.getElementById('stats').innerHTML = `
+          <div class="stat-box">
+            <div class="number">${stats.users}</div>
+            <div class="label">Users</div>
+          </div>
+          <div class="stat-box">
+            <div class="number">${stats.cards}</div>
+            <div class="label">Cards</div>
+          </div>
+          <div class="stat-box">
+            <div class="number">${stats.pendingMatches}</div>
+            <div class="label">Pending Matches</div>
+          </div>
+          <div class="stat-box">
+            <div class="number">${stats.trades}</div>
+            <div class="label">Trades</div>
+          </div>
+        `;
+      } catch (err) {
+        showMessage('Failed to load stats', 'error');
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        var res = await fetch('/api/admin/users', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var users = await res.json();
+
+        var html = '';
+        users.forEach(function(user) {
+          html += '<tr>';
+          html += '<td>' + user.id + '</td>';
+          html += '<td>' + user.username + '</td>';
+          html += '<td>' + user.display_name + '</td>';
+          html += '<td>' + (user.card_count || 0) + '</td>';
+          html += '<td><button class="danger small" onclick="deleteUser(' + user.id + ', \'' + user.username + '\')">🗑️ Delete</button></td>';
+          html += '</tr>';
+        });
+
+        document.getElementById('users-list').innerHTML = html || '<tr><td colspan="5">No users found</td></tr>';
+      } catch (err) {
+        showMessage('Failed to load users', 'error');
+      }
     }
 
     async function addUser() {
-      const adminKey = getAdminKey();
-      const username = document.getElementById('new-username').value;
-      const password = document.getElementById('new-password').value;
-      const displayName = document.getElementById('new-displayname').value;
-      const resultDiv = document.getElementById('add-result');
-
-      if (!adminKey) {
-        resultDiv.innerHTML = '<div class="result error">Please enter admin key</div>';
-        return;
-      }
+      var username = document.getElementById('new-username').value.trim();
+      var password = document.getElementById('new-password').value;
+      var displayName = document.getElementById('new-displayname').value.trim();
 
       if (!username || !password || !displayName) {
-        resultDiv.innerHTML = '<div class="result error">Please fill all fields</div>';
+        showMessage('Please fill in all fields', 'error');
         return;
       }
 
       try {
-        const res = await fetch(API_URL + '/api/admin/add-user', {
+        var res = await fetch('/api/admin/users', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminKey: adminKey, username: username, password: password, displayName: displayName })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            username: username,
+            password: password,
+            displayName: displayName
+          })
         });
 
-        const data = await res.json();
+        var result = await res.json();
 
         if (res.ok) {
-          resultDiv.innerHTML = '<div class="result success">User "' + username + '" created successfully!</div>';
+          showMessage('User added successfully!', 'success');
           document.getElementById('new-username').value = '';
           document.getElementById('new-password').value = '';
           document.getElementById('new-displayname').value = '';
-          listUsers();
+          loadUsers();
+          loadStats();
         } else {
-          resultDiv.innerHTML = '<div class="result error">Error: ' + data.error + '</div>';
+          showMessage(result.error || 'Failed to add user', 'error');
         }
       } catch (err) {
-        resultDiv.innerHTML = '<div class="result error">Error: ' + err.message + '</div>';
+        showMessage('Failed to add user', 'error');
       }
     }
 
-    async function listUsers() {
-      const adminKey = getAdminKey();
-      const listDiv = document.getElementById('user-list');
-
-      if (!adminKey) {
-        listDiv.innerHTML = '<div class="result error">Please enter admin key</div>';
+    async function deleteUser(userId, username) {
+      if (!confirm('Delete user "' + username + '"? This will also delete all their cards and matches!')) {
         return;
       }
 
       try {
-        const res = await fetch(API_URL + '/api/admin/list-users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminKey: adminKey })
+        var res = await fetch('/api/admin/users/' + userId, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + token }
         });
 
-        const data = await res.json();
+        var result = await res.json();
 
         if (res.ok) {
-          if (data.length > 0) {
-            let html = '';
-            for (let i = 0; i < data.length; i++) {
-              const user = data[i];
-              html += '<div class="user-item">';
-              html += '<span><strong>' + user.display_name + '</strong> (@' + user.username + ')</span>';
-              html += '<button class="delete-btn" onclick="deleteUser(\'' + user.username + '\')">Delete</button>';
-              html += '</div>';
-            }
-            listDiv.innerHTML = html;
-          } else {
-            listDiv.innerHTML = '<div class="result">No users found</div>';
-          }
+          showMessage('User deleted!', 'success');
+          loadUsers();
+          loadStats();
         } else {
-          listDiv.innerHTML = '<div class="result error">Error: ' + data.error + '</div>';
+          showMessage(result.error || 'Failed to delete user', 'error');
         }
       } catch (err) {
-        listDiv.innerHTML = '<div class="result error">Error: ' + err.message + '</div>';
+        showMessage('Failed to delete user', 'error');
       }
     }
 
-    async function deleteUser(username) {
-      if (!confirm('Delete user "' + username + '"? This will remove all their data.')) return;
+    async function downloadBackup() {
+      try {
+        var res = await fetch('/api/admin/backup', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var backup = await res.json();
 
-      const adminKey = getAdminKey();
+        var blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'pokemon-tcg-backup-' + new Date().toISOString().split('T')[0] + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showMessage('Backup downloaded!', 'success');
+      } catch (err) {
+        showMessage('Failed to download backup', 'error');
+      }
+    }
+
+    async function restoreBackup() {
+      var fileInput = document.getElementById('restore-file');
+      var file = fileInput.files[0];
+
+      if (!file) {
+        showMessage('Please select a backup file', 'error');
+        return;
+      }
+
+      if (!confirm('This will replace ALL current data. Are you sure?')) {
+        return;
+      }
 
       try {
-        const res = await fetch(API_URL + '/api/admin/delete-user', {
+        var text = await file.text();
+        var backup = JSON.parse(text);
+
+        var res = await fetch('/api/admin/restore', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminKey: adminKey, username: username })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(backup)
         });
 
-        const data = await res.json();
+        var result = await res.json();
 
         if (res.ok) {
-          alert('User "' + username + '" deleted');
-          listUsers();
+          showMessage('Data restored successfully!', 'success');
+          loadStats();
+          loadUsers();
         } else {
-          alert('Error: ' + data.error);
+          showMessage(result.error || 'Restore failed', 'error');
         }
       } catch (err) {
-        alert('Error: ' + err.message);
+        showMessage('Failed to restore: ' + err.message, 'error');
       }
+    }
+
+    async function previewBackup() {
+      try {
+        var res = await fetch('/api/admin/backup', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var backup = await res.json();
+
+        var preview = document.getElementById('preview');
+        preview.style.display = 'block';
+        preview.textContent = JSON.stringify(backup, null, 2);
+      } catch (err) {
+        showMessage('Failed to load preview', 'error');
+      }
+    }
+
+    async function clearAllData() {
+      if (!confirm('This will delete ALL cards, matches, and trades. Users will be kept. Are you sure?')) {
+        return;
+      }
+
+      if (!confirm('REALLY sure? This cannot be undone!')) {
+        return;
+      }
+
+      try {
+        var res = await fetch('/api/admin/clear', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        var result = await res.json();
+
+        if (res.ok) {
+          showMessage('All data cleared!', 'success');
+          loadStats();
+        } else {
+          showMessage(result.error || 'Failed to clear data', 'error');
+        }
+      } catch (err) {
+        showMessage('Failed to clear data', 'error');
+      }
+    }
+
+    function showMessage(text, type) {
+      var msg = document.getElementById('message');
+      msg.textContent = text;
+      msg.className = type;
+      setTimeout(function() {
+        msg.className = '';
+      }, 5000);
     }
   </script>
 </body>

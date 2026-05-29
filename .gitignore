@@ -2,3 +2,4 @@ node_modules/
 trading.db
 cards-cache.json
 .env
+README.txt
