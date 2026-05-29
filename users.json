@@ -2,6 +2,7 @@
   "users": [
     { "username": "yotaro", "password": "pokemon", "displayName": "Yotaro" },
     { "username": "hisashi", "password": "pokemon", "displayName": "Hisashi" },
-    { "username": "ryuta", "password": "pokemon", "displayName": "Ryuta" }
+    { "username": "ryuta", "password": "pokemon", "displayName": "Ryuta" },
+    { "username": "guest", "password": "pokemon", "displayName": "Guest" }
   ]
 }

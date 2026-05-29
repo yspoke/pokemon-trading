@@ -98,7 +98,7 @@ router.get('/stats', authenticateToken, (req, res) => {
 // Get all data for backup
 router.get('/backup', authenticateToken, (req, res) => {
   try {
-    const users = prepare('SELECT id, username, display_name FROM users').all();
+    const users = prepare('SELECT id, username, password, display_name FROM users').all();
     const userCards = prepare('SELECT * FROM user_cards').all();
     const matches = prepare('SELECT * FROM matches').all();
     const trades = prepare('SELECT * FROM trades').all();
@@ -132,11 +132,29 @@ router.post('/restore', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'No data provided' });
     }
 
-    // Clear existing data (except users)
+    // Clear existing data
     prepare('DELETE FROM notifications').run();
     prepare('DELETE FROM trades').run();
     prepare('DELETE FROM matches').run();
     prepare('DELETE FROM user_cards').run();
+
+    // Restore users (add new ones, skip existing)
+    if (data.users && data.users.length > 0) {
+      data.users.forEach(user => {
+        try {
+          // Check if user already exists
+          const existing = prepare('SELECT id FROM users WHERE username = ?').get(user.username);
+          if (!existing) {
+            prepare(`
+              INSERT INTO users (id, username, password, display_name)
+              VALUES (?, ?, ?, ?)
+            `).run(user.id, user.username, user.password || user.username, user.display_name);
+          }
+        } catch (e) {
+          console.log('Skip user:', e.message);
+        }
+      });
+    }
 
     // Restore user_cards
     if (data.userCards && data.userCards.length > 0) {
