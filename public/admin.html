@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Pokemon Trade</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    h1 { margin-bottom: 30px; text-align: center; }
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 20px;
+    }
+    h2 { margin-bottom: 20px; font-size: 1.2rem; }
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-size: 1rem;
+    }
+    input::placeholder { color: rgba(255, 255, 255, 0.5); }
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(45deg, #4ecdc4, #44a08d);
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover { transform: scale(1.02); }
+    .result {
+      margin-top: 15px;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .success { border-left: 4px solid #4ecdc4; }
+    .error { border-left: 4px solid #ff6b6b; }
+    .user-list { margin-top: 15px; }
+    .user-item {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px 15px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .delete-btn {
+      width: auto;
+      padding: 5px 15px;
+      background: #ff6b6b;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 Admin Panel</h1>
+
+    <!-- Admin Key -->
+    <div class="card">
+      <h2>🔑 Admin Key</h2>
+      <input type="password" id="admin-key" placeholder="Enter admin key">
+    </div>
+
+    <!-- Add User -->
+    <div class="card">
+      <h2>➕ Add New User</h2>
+      <input type="text" id="new-username" placeholder="Username">
+      <input type="password" id="new-password" placeholder="Password">
+      <input type="text" id="new-displayname" placeholder="Display Name">
+      <button onclick="addUser()">Add User</button>
+      <div id="add-result"></div>
+    </div>
+
+    <!-- List Users -->
+    <div class="card">
+      <h2>👥 Current Users</h2>
+      <button onclick="listUsers()">Refresh User List</button>
+      <div id="user-list" class="user-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+
+    function getAdminKey() {
+      return document.getElementById('admin-key').value;
+    }
+
+    async function addUser() {
+      const adminKey = getAdminKey();
+      const username = document.getElementById('new-username').value;
+      const password = document.getElementById('new-password').value;
+      const displayName = document.getElementById('new-displayname').value;
+      const resultDiv = document.getElementById('add-result');
+
+      if (!adminKey) {
+        resultDiv.innerHTML = '<div class="result error">Please enter admin key</div>';
+        return;
+      }
+
+      if (!username || !password || !displayName) {
+        resultDiv.innerHTML = '<div class="result error">Please fill all fields</div>';
+        return;
+      }
+
+      try {
+        const res = await fetch(API_URL + '/api/admin/add-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminKey: adminKey, username: username, password: password, displayName: displayName })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          resultDiv.innerHTML = '<div class="result success">User "' + username + '" created successfully!</div>';
+          document.getElementById('new-username').value = '';
+          document.getElementById('new-password').value = '';
+          document.getElementById('new-displayname').value = '';
+          listUsers();
+        } else {
+          resultDiv.innerHTML = '<div class="result error">Error: ' + data.error + '</div>';
+        }
+      } catch (err) {
+        resultDiv.innerHTML = '<div class="result error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function listUsers() {
+      const adminKey = getAdminKey();
+      const listDiv = document.getElementById('user-list');
+
+      if (!adminKey) {
+        listDiv.innerHTML = '<div class="result error">Please enter admin key</div>';
+        return;
+      }
+
+      try {
+        const res = await fetch(API_URL + '/api/admin/list-users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminKey: adminKey })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          if (data.length > 0) {
+            let html = '';
+            for (let i = 0; i < data.length; i++) {
+              const user = data[i];
+              html += '<div class="user-item">';
+              html += '<span><strong>' + user.display_name + '</strong> (@' + user.username + ')</span>';
+              html += '<button class="delete-btn" onclick="deleteUser(\'' + user.username + '\')">Delete</button>';
+              html += '</div>';
+            }
+            listDiv.innerHTML = html;
+          } else {
+            listDiv.innerHTML = '<div class="result">No users found</div>';
+          }
+        } else {
+          listDiv.innerHTML = '<div class="result error">Error: ' + data.error + '</div>';
+        }
+      } catch (err) {
+        listDiv.innerHTML = '<div class="result error">Error: ' + err.message + '</div>';
+      }
+    }
+
+    async function deleteUser(username) {
+      if (!confirm('Delete user "' + username + '"? This will remove all their data.')) return;
+
+      const adminKey = getAdminKey();
+
+      try {
+        const res = await fetch(API_URL + '/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminKey: adminKey, username: username })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          alert('User "' + username + '" deleted');
+          listUsers();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

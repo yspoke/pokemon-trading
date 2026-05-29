@@ -1,277 +1,410 @@
 // public/app.js
+var API_URL = '';
+var token = localStorage.getItem('token');
+var currentUser = null;
+var myCardIds = new Set();
+var myWantedCardIds = new Set();
+var myCards = [];
+var myWantedCards = [];
+var selectedExpansion = '';
+var selectedRarity = '';
 
-const API_URL = '';
-let token = localStorage.getItem('token');
-let currentUser = null;
-let selectedExpansion = '';
-let selectedRarity = '';
-let myCardIds = new Set();
+// Expansion and rarity data (loaded from API)
+var expansions = [];
+var rarities = ['◊', '◊◊', '◊◊◊', '◊◊◊◊', '☆', '☆☆', '☆☆☆', '♕'];
 
-// Check if logged in on page load
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
   if (token) {
     verifyToken();
+  } else {
+    showLogin();
   }
-  
-  document.getElementById('search-btn').addEventListener('click', searchCards);
-  document.getElementById('card-search').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchCards();
-  });
+  loadFilters();
 });
 
-// Login
-async function login() {
-  const username = document.getElementById('username').value;
-  const password = document.getElementById('password').value;
-  const errorEl = document.getElementById('login-error');
+// Load filter options from API
+async function loadFilters() {
+  var expDiv = document.getElementById('expansion-filters');
+  var rarDiv = document.getElementById('rarity-filters');
 
+  // Load expansions from API
   try {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+    var res = await fetch(API_URL + '/api/tcgp/expansions', {
+      headers: { 'Authorization': 'Bearer ' + token }
     });
-
-    const data = await res.json();
-
     if (res.ok) {
-      token = data.token;
-      currentUser = data.user;
-      localStorage.setItem('token', token);
-      showApp();
-    } else {
-      errorEl.textContent = data.error || 'Login failed';
+      expansions = await res.json();
     }
   } catch (err) {
-    errorEl.textContent = 'Connection error. Please try again.';
+    console.error('Error loading expansions:', err);
   }
+
+  // Render expansion filters
+  if (expDiv) {
+    var expHtml = '<label class="filter-option"><input type="radio" name="expansion" value="" checked onchange="filterByExpansion(\'\')"><span>All</span></label>';
+    expansions.forEach(function(exp) {
+      expHtml += '<label class="filter-option"><input type="radio" name="expansion" value="' + exp.id + '" onchange="filterByExpansion(\'' + exp.id + '\')"><span>' + exp.name + '</span></label>';
+    });
+    expDiv.innerHTML = expHtml;
+  }
+
+  // Render rarity filters
+  if (rarDiv) {
+    var rarHtml = '<label class="filter-option"><input type="radio" name="rarity" value="" checked onchange="filterByRarity(\'\')"><span>All</span></label>';
+    rarities.forEach(function(r) {
+      var encodedRarity = encodeURIComponent(r);
+      rarHtml += '<label class="filter-option"><input type="radio" name="rarity" value="' + encodedRarity + '" onchange="filterByRarity(\'' + encodedRarity + '\')"><span>' + r + '</span></label>';
+    });
+    rarDiv.innerHTML = rarHtml;
+  }
+}
+
+// Show login screen
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+}
+
+// Show app screen
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  loadMyCards();
+  loadFilters();
 }
 
 // Verify token
 async function verifyToken() {
   try {
-    const res = await fetch(`${API_URL}/api/auth/verify`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    var res = await fetch(API_URL + '/api/auth/verify', {
+      headers: { 'Authorization': 'Bearer ' + token }
     });
-
     if (res.ok) {
-      const data = await res.json();
+      var data = await res.json();
       currentUser = data.user;
+      var displayEl = document.getElementById('user-display');
+      if (displayEl) displayEl.textContent = currentUser.displayName;
       showApp();
     } else {
-      logout();
+      localStorage.removeItem('token');
+      showLogin();
     }
   } catch (err) {
-    logout();
+    showLogin();
+  }
+}
+
+// Login
+async function login() {
+  var username = document.getElementById('username').value.trim();
+  var password = document.getElementById('password').value;
+  var errorDiv = document.getElementById('login-error');
+
+  if (!username || !password) {
+    errorDiv.textContent = 'Please enter username and password';
+    return;
+  }
+
+  try {
+    var res = await fetch(API_URL + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+
+    var data = await res.json();
+
+    if (res.ok) {
+      token = data.token;
+      localStorage.setItem('token', token);
+      currentUser = data.user;
+      var displayEl = document.getElementById('user-display');
+      if (displayEl) displayEl.textContent = currentUser.displayName;
+      if (errorDiv) errorDiv.textContent = '';
+      showApp();
+    } else {
+      errorDiv.textContent = data.error || 'Login failed';
+    }
+  } catch (err) {
+    console.log('Login error:', err);
+    errorDiv.textContent = 'Connection error';
   }
 }
 
 // Logout
 function logout() {
+  localStorage.removeItem('token');
   token = null;
   currentUser = null;
-  localStorage.removeItem('token');
-  document.getElementById('login-page').style.display = 'flex';
-  document.getElementById('app-page').style.display = 'none';
+  showLogin();
 }
 
-// Show main app
-function showApp() {
-  document.getElementById('login-page').style.display = 'none';
-  document.getElementById('app-page').style.display = 'block';
-  document.getElementById('display-name').textContent = currentUser.displayName;
-  
-  loadExpansions();
-  loadMyCards();
-  loadMatchCount();
-}
-
-// Tab navigation
+// Show tab (matches the HTML onclick)
 function showTab(tabName) {
-  document.querySelectorAll('.tab-content').forEach(tab => {
+  // Hide all tabs
+  document.querySelectorAll('.tab-content').forEach(function(tab) {
     tab.classList.remove('active');
   });
-  
-  document.querySelectorAll('.nav-tabs button').forEach(btn => {
+  document.querySelectorAll('.nav-tabs button').forEach(function(btn) {
     btn.classList.remove('active');
   });
 
-  document.getElementById(`${tabName}-tab`).classList.add('active');
+  // Show selected tab
+  var tabElement = document.getElementById(tabName + '-tab');
+  if (tabElement) {
+    tabElement.classList.add('active');
+  }
+
+  // Highlight the clicked button
   event.target.classList.add('active');
 
-  switch (tabName) {
-    case 'my-cards':
-      loadMyCards();
-      break;
-    case 'friends-cards':
-      loadFriendsCards();
-      break;
-    case 'matches':
-      loadMatches();
-      break;
+  // Load data for the tab
+  if (tabName === 'my-cards') {
+    loadMyCards();
+  } else if (tabName === 'friends') {
+    loadFriendsCards();
+  } else if (tabName === 'matches') {
+    loadMatches();
+    loadPossibleTrades();
+    loadPendingTrades();
   }
 }
 
-// Helper function to escape quotes
+// Escape quotes for onclick handlers
 function escapeQuotes(str) {
   if (!str) return '';
-  return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-// Load expansions
-async function loadExpansions() {
+// Load my cards
+async function loadMyCards() {
   try {
-    const res = await fetch(`${API_URL}/api/tcgp/expansions`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    var res = await fetch(API_URL + '/api/cards/my-cards', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var data = await res.json();
+
+    myCards = data.available || [];
+    myWantedCards = data.wanted || [];
+
+    myCardIds = new Set(myCards.map(function(c) { return c.card_id; }));
+    myWantedCardIds = new Set(myWantedCards.map(function(c) { return c.card_id; }));
+
+    displayMyCards();
+    displayMyWantedCards();
+  } catch (err) {
+    console.error('Error loading my cards:', err);
+  }
+}
+
+// Display my cards (cards I have)
+function displayMyCards() {
+  var container = document.getElementById('my-cards-list');
+  if (!container) return;
+
+  if (myCards.length === 0) {
+    container.innerHTML = '<p class="empty-message">No cards yet. Search and add cards you have!</p>';
+    return;
+  }
+
+  var html = '<div class="card-grid">';
+  myCards.forEach(function(card) {
+    html += '<div class="card-item">';
+    html += '<img src="' + card.card_image + '" alt="' + escapeQuotes(card.card_name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+    html += '<h3>' + card.card_name + '</h3>';
+    html += '<p class="card-rarity">' + (card.card_rarity || '') + '</p>';
+    html += '<p class="card-set">' + (card.card_set || '') + '</p>';
+    html += '<p class="card-quantity">Qty: ' + (card.quantity || 1) + '</p>';
+    html += '<div class="quantity-controls">';
+    html += '<button class="btn-qty" onclick="updateQuantity(\'' + card.card_id + '\', \'available\', ' + ((card.quantity || 1) - 1) + ')">−</button>';
+    html += '<span>' + (card.quantity || 1) + '</span>';
+    html += '<button class="btn-qty" onclick="updateQuantity(\'' + card.card_id + '\', \'available\', ' + ((card.quantity || 1) + 1) + ')">+</button>';
+    html += '</div>';
+    html += '<button class="btn-remove" onclick="removeCard(' + card.id + ')">Remove</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// Display my wanted cards
+function displayMyWantedCards() {
+  var container = document.getElementById('my-wanted-list');
+  if (!container) return;
+
+  if (myWantedCards.length === 0) {
+    container.innerHTML = '<p class="empty-message">No wanted cards yet. Browse friends\' cards or search to add wants!</p>';
+    return;
+  }
+
+  var html = '<div class="card-grid">';
+  myWantedCards.forEach(function(card) {
+    html += '<div class="card-item card-wanted">';
+    html += '<img src="' + card.card_image + '" alt="' + escapeQuotes(card.card_name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+    html += '<h3>' + card.card_name + '</h3>';
+    html += '<p class="card-rarity">' + (card.card_rarity || '') + '</p>';
+    html += '<p class="card-quantity">Qty: ' + (card.quantity || 1) + '</p>';
+    html += '<div class="quantity-controls">';
+    html += '<button class="btn-qty" onclick="updateQuantity(\'' + card.card_id + '\', \'wanted\', ' + ((card.quantity || 1) - 1) + ')">−</button>';
+    html += '<span>' + (card.quantity || 1) + '</span>';
+    html += '<button class="btn-qty" onclick="updateQuantity(\'' + card.card_id + '\', \'wanted\', ' + ((card.quantity || 1) + 1) + ')">+</button>';
+    html += '</div>';
+    html += '<button class="btn-remove" onclick="removeWantedCard(\'' + card.card_id + '\')">Remove</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// Update card quantity
+async function updateQuantity(cardId, status, newQuantity) {
+  try {
+    var res = await fetch(API_URL + '/api/cards/update-quantity', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        cardId: cardId,
+        status: status,
+        quantity: newQuantity
+      })
     });
 
-    const expansions = await res.json();
-    const expansionList = document.getElementById('expansion-list');
-
-    let html = `
-      <label class="filter-option">
-        <input type="radio" name="expansion" value="" checked onchange="onFilterChange()">
-        <span>All Expansions</span>
-      </label>
-    `;
-
-    if (expansions && expansions.length > 0) {
-      expansions.forEach(exp => {
-        html += `
-          <label class="filter-option">
-            <input type="radio" name="expansion" value="${exp.id}" onchange="onFilterChange()">
-            <span>${exp.name}</span>
-          </label>
-        `;
-      });
+    if (res.ok) {
+      loadMyCards();
+    } else {
+      var data = await res.json();
+      alert(data.error || 'Failed to update quantity');
     }
-
-    expansionList.innerHTML = html;
   } catch (err) {
-    console.error('Error loading expansions:', err);
+    alert('Error updating quantity');
   }
 }
 
-// Handle filter change (expansion or rarity)
-function onFilterChange() {
-  const expansionEl = document.querySelector('input[name="expansion"]:checked');
-  const rarityEl = document.querySelector('input[name="rarity"]:checked');
-  
-  selectedExpansion = expansionEl ? expansionEl.value : '';
-  selectedRarity = rarityEl ? rarityEl.value : '';
-  
-  // If any filter is selected, load cards
-  if (selectedExpansion || selectedRarity) {
-    loadFilteredCards();
-  } else {
-    hideSearchResults();
+// Filter by expansion
+function filterByExpansion(expansion) {
+  selectedExpansion = expansion;
+  if (expansion || selectedRarity || document.getElementById('card-search').value.trim()) {
+    searchCards();
   }
 }
 
-// Load cards with filters
-async function loadFilteredCards() {
-  showSearchResults();
-  document.getElementById('search-results').innerHTML = '<div class="loading"></div>';
-
-  try {
-    let url = `${API_URL}/api/tcgp/search?`;
-    const query = document.getElementById('card-search').value.trim();
-    
-    if (query) url += `q=${encodeURIComponent(query)}&`;
-    if (selectedExpansion) url += `expansion=${encodeURIComponent(selectedExpansion)}&`;
-    if (selectedRarity) url += `rarity=${encodeURIComponent(selectedRarity)}`;
-      
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    const cards = await res.json();
-    displaySearchCards(cards);
-  } catch (err) {
-    console.error('Error loading cards:', err);
-    document.getElementById('search-results').innerHTML = '<p class="error">Error loading cards.</p>';
+// Filter by rarity
+function filterByRarity(rarity) {
+  selectedRarity = decodeURIComponent(rarity);
+  if (selectedRarity || selectedExpansion || document.getElementById('card-search').value.trim()) {
+    searchCards();
   }
-}
-
-// Hide search results
-function hideSearchResults() {
-  document.getElementById('search-results-section').style.display = 'none';
-}
-
-// Show search results section
-function showSearchResults() {
-  document.getElementById('search-results-section').style.display = 'block';
 }
 
 // Search cards
 async function searchCards() {
-  const query = document.getElementById('card-search').value.trim();
-  
+  var query = document.getElementById('card-search').value.trim();
+  var resultsDiv = document.getElementById('search-results');
+
   if (!query && !selectedExpansion && !selectedRarity) {
-    hideSearchResults();
+    resultsDiv.innerHTML = '<p class="empty-message">Enter a search term or select a filter.</p>';
     return;
   }
 
-  loadFilteredCards();
-}
+  resultsDiv.innerHTML = '<div class="loading"></div>';
 
-// Display search cards
-function displaySearchCards(cards) {
-  const resultsDiv = document.getElementById('search-results');
+  try {
+    var url = API_URL + '/api/tcgp/search?';
+    var params = [];
+    if (query) params.push('q=' + encodeURIComponent(query));
+    if (selectedExpansion) params.push('expansion=' + encodeURIComponent(selectedExpansion));
+    if (selectedRarity) params.push('rarity=' + encodeURIComponent(selectedRarity));
+    url += params.join('&');
 
-  if (cards && cards.length > 0) {
-    resultsDiv.innerHTML = `
-      <p class="results-info">Found ${cards.length} cards</p>
-      <div class="card-grid">
-        ${cards.map(card => {
-          const iHaveThis = myCardIds.has(card.id);
-          return `
-            <div class="card-item ${iHaveThis ? 'card-owned' : ''}">
-              <img src="${card.image}" alt="${card.name}" 
-                   onerror="this.onerror=null; this.src='https://via.placeholder.com/200x280?text=${encodeURIComponent(card.name)}'">
-              <h3>${card.name}</h3>
-              <p>${card.id}</p>
-              <p class="card-rarity">${card.rarity || ''}</p>
-              <div class="card-actions">
-                ${iHaveThis 
-                  ? `<button class="btn-owned" onclick="removeMyCard('${card.id}')">✅ I Have This</button>`
-                  : `<button class="btn-have" onclick="addMyCard('${card.id}', '${escapeQuotes(card.name)}', '${card.image}', '${escapeQuotes(card.pack || '')}')">+ I Have This</button>`
-                }
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-  } else {
-    resultsDiv.innerHTML = '<div class="empty-state"><span>🔍</span><p>No cards found.</p></div>';
+    var res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var cards = await res.json();
+
+    displaySearchResults(cards);
+  } catch (err) {
+    console.error('Search error:', err);
+    resultsDiv.innerHTML = '<p class="error">Error searching cards</p>';
   }
 }
 
-// Add card to my collection
-async function addMyCard(cardId, cardName, cardImage, cardSet) {
+// Display search results
+function displaySearchResults(cards) {
+  var resultsDiv = document.getElementById('search-results');
+
+  if (!cards || cards.length === 0) {
+    resultsDiv.innerHTML = '<p class="empty-message">No cards found.</p>';
+    return;
+  }
+
+  var html = '<p class="results-count">Found ' + cards.length + ' cards</p>';
+  html += '<div class="card-grid">';
+
+  cards.forEach(function(card) {
+    var isOwned = myCardIds.has(card.id);
+    var isWanted = myWantedCardIds.has(card.id);
+    var cardClass = 'card-item';
+    if (isOwned) cardClass += ' card-owned';
+    if (isWanted) cardClass += ' card-wanted';
+
+    html += '<div class="' + cardClass + '">';
+    html += '<img src="' + card.image + '" alt="' + escapeQuotes(card.name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+    html += '<h3>' + card.name + '</h3>';
+    html += '<p class="card-rarity">' + (card.rarity || '') + '</p>';
+    html += '<p class="card-set">' + (card.pack || card.expansion || '') + '</p>';
+    html += '<div class="card-actions-double">';
+
+    // I Have This button
+    if (isOwned) {
+      html += '<button class="btn-owned" onclick="addCard(\'' + card.id + '\', \'' + escapeQuotes(card.name) + '\', \'' + card.image + '\', \'' + escapeQuotes(card.pack || card.expansion || '') + '\', \'' + escapeQuotes(card.rarity || '') + '\')">✓ Have (+1)</button>';
+    } else {
+      html += '<button class="btn-have" onclick="addCard(\'' + card.id + '\', \'' + escapeQuotes(card.name) + '\', \'' + card.image + '\', \'' + escapeQuotes(card.pack || card.expansion || '') + '\', \'' + escapeQuotes(card.rarity || '') + '\')">📦 I Have This</button>';
+    }
+
+    // I Want This button
+    if (isWanted) {
+      html += '<button class="btn-wanted-active" onclick="addWantedCard(\'' + card.id + '\', \'' + escapeQuotes(card.name) + '\', \'' + card.image + '\', \'' + escapeQuotes(card.pack || card.expansion || '') + '\', \'' + escapeQuotes(card.rarity || '') + '\')">❤️ Want (+1)</button>';
+    } else {
+      html += '<button class="btn-want-search" onclick="addWantedCard(\'' + card.id + '\', \'' + escapeQuotes(card.name) + '\', \'' + card.image + '\', \'' + escapeQuotes(card.pack || card.expansion || '') + '\', \'' + escapeQuotes(card.rarity || '') + '\')">♡ I Want This</button>';
+    }
+
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  resultsDiv.innerHTML = html;
+}
+
+// Add card I have
+async function addCard(cardId, cardName, cardImage, cardSet, cardRarity) {
   try {
-    const res = await fetch(`${API_URL}/api/cards/add`, {
+    var res = await fetch(API_URL + '/api/cards/add', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': 'Bearer ' + token
       },
       body: JSON.stringify({
-        cardId,
-        cardName,
-        cardImage,
-        cardSet,
-        status: 'available'
+        cardId: cardId,
+        cardName: cardName,
+        cardImage: cardImage,
+        cardSet: cardSet,
+        cardRarity: cardRarity,
+        status: 'available',
+        quantity: 1
       })
     });
 
     if (res.ok) {
       myCardIds.add(cardId);
       loadMyCards();
-      loadFilteredCards();
+      searchCards();
     } else {
-      const data = await res.json();
+      var data = await res.json();
       alert(data.error || 'Failed to add card');
     }
   } catch (err) {
@@ -279,292 +412,499 @@ async function addMyCard(cardId, cardName, cardImage, cardSet) {
   }
 }
 
-// Remove card from my collection
-async function removeMyCard(cardId) {
+// Add wanted card
+async function addWantedCard(cardId, cardName, cardImage, cardSet, cardRarity) {
   try {
-    const res = await fetch(`${API_URL}/api/cards/my-cards`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    var res = await fetch(API_URL + '/api/cards/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        cardId: cardId,
+        cardName: cardName,
+        cardImage: cardImage,
+        cardSet: cardSet,
+        cardRarity: cardRarity,
+        status: 'wanted',
+        quantity: 1
+      })
     });
-    const data = await res.json();
-    const card = data.available.find(c => c.card_id === cardId);
-    
-    if (card) {
-      await fetch(`${API_URL}/api/cards/remove/${card.id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      myCardIds.delete(cardId);
+
+    if (res.ok) {
+      myWantedCardIds.add(cardId);
       loadMyCards();
-      
-      // Refresh search if filters are active
-      if (selectedExpansion || selectedRarity || document.getElementById('card-search').value.trim()) {
-        loadFilteredCards();
-      }
-    }
-  } catch (err) {
-    alert('Error removing card');
-  }
-}
-
-// Load my cards
-async function loadMyCards() {
-  try {
-    const res = await fetch(`${API_URL}/api/cards/my-cards`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    const data = await res.json();
-    
-    myCardIds.clear();
-    if (data.available) {
-      data.available.forEach(card => myCardIds.add(card.card_id));
-    }
-
-    document.getElementById('my-cards-count').textContent = data.available?.length || 0;
-
-    const myCardsDiv = document.getElementById('my-cards-list');
-    if (data.available && data.available.length > 0) {
-      myCardsDiv.innerHTML = `
-        <div class="card-grid">
-          ${data.available.map(card => `
-            <div class="card-item card-owned">
-              <img src="${card.card_image}" alt="${card.card_name}"
-                   onerror="this.onerror=null; this.src='https://via.placeholder.com/200x280?text=${encodeURIComponent(card.card_name)}'">
-              <h3>${card.card_name}</h3>
-              <p>${card.card_id}</p>
-              <div class="card-actions">
-                <button class="btn-remove" onclick="removeMyCard('${card.card_id}')">Remove</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
+      searchCards();
     } else {
-      myCardsDiv.innerHTML = '<p class="empty-message">No cards yet. Search below to add cards you have!</p>';
+      var data = await res.json();
+      alert(data.error || 'Failed to add card');
     }
   } catch (err) {
-    console.error('Error loading my cards:', err);
+    alert('Error adding card');
   }
 }
 
-// Load friends cards
-async function loadFriendsCards() {
-  const friendsDiv = document.getElementById('friends-cards-list');
-  friendsDiv.innerHTML = '<div class="loading"></div>';
+// Remove card
+// Remove card
+async function removeCard(cardId) {
+  if (!confirm('Remove this card?')) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/users`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    var res = await fetch(API_URL + '/api/cards/remove/' + cardId, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
     });
 
-    const users = await res.json();
+    // Just reload regardless - the delete worked if we got here
+    loadMyCards();
+  } catch (err) {
+    console.error('Error removing card:', err);
+    loadMyCards();
+  }
+}
 
-    if (!users || users.length === 0) {
-      friendsDiv.innerHTML = '<div class="empty-state"><span>👥</span><p>No other users yet.</p></div>';
-      return;
-    }
+// Remove wanted card
+async function removeWantedCard(cardId) {
+  if (!confirm('Remove from wanted?')) return;
 
-    let html = '';
-    
-    for (const user of users) {
-      const cardsUrl = `${API_URL}/api/users/id/${user.id}/cards`;
-      const cardsRes = await fetch(cardsUrl, {
-        headers: { 'Authorization': `Bearer ${token}` }
+  try {
+    var res = await fetch(API_URL + '/api/cards/remove-wanted/' + cardId, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+
+    // Just reload regardless
+    loadMyCards();
+  } catch (err) {
+    console.error('Error removing card:', err);
+    loadMyCards();
+  }
+}
+
+// Load friends' cards
+async function loadFriendsCards() {
+  var friendsHaveDiv = document.getElementById('friends-cards-list');
+  var friendsWantDiv = document.getElementById('friends-wanted-list');
+
+  if (friendsHaveDiv) friendsHaveDiv.innerHTML = '<div class="loading"></div>';
+  if (friendsWantDiv) friendsWantDiv.innerHTML = '<div class="loading"></div>';
+
+  try {
+    var res = await fetch(API_URL + '/api/users', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var users = await res.json();
+
+    var friendsHaveHtml = '';
+    var friendsWantHtml = '';
+
+    for (var i = 0; i < users.length; i++) {
+      var user = users[i];
+
+      var cardsRes = await fetch(API_URL + '/api/users/id/' + user.id + '/cards', {
+        headers: { 'Authorization': 'Bearer ' + token }
       });
-      
-      if (!cardsRes.ok) {
-        console.error(`Failed to fetch cards for user ${user.id}`);
-        continue;
-      }
-      
-      const cardsData = await cardsRes.json();
-      const cardCount = cardsData.available?.length || 0;
-      
-      html += `<div class="friend-section">`;
-      html += `
-        <div class="friend-header">
-          <h3>👤 ${user.display_name}</h3>
-          <span class="friend-card-count">${cardCount} card${cardCount !== 1 ? 's' : ''}</span>
-        </div>
-      `;
-      
-      if (cardCount > 0) {
-        html += `<div class="card-grid">`;
-        for (const card of cardsData.available) {
-          let buttonHtml = '';
-          
+      var cardsData = await cardsRes.json();
+
+      var availableCards = cardsData.available || [];
+      var wantedCards = cardsData.wanted || [];
+
+      // Cards this friend has
+      if (availableCards.length > 0) {
+        friendsHaveHtml += '<div class="friend-section">';
+        friendsHaveHtml += '<div class="friend-header"><h4>' + user.display_name + '</h4><span class="friend-card-count">' + availableCards.length + ' cards</span></div>';
+        friendsHaveHtml += '<div class="card-grid">';
+
+        availableCards.forEach(function(card) {
+          var buttonHtml = '';
+
           if (card.isPending) {
             if (card.pendingByMe) {
-              buttonHtml = `<button class="btn-pending" disabled>⏳ You want this</button>`;
+              buttonHtml = '<button class="btn-pending" disabled>⏳ You want this</button>';
+              buttonHtml += '<button class="btn-cancel-want" onclick="cancelWant(\'' + card.card_id + '\', ' + user.id + ')">Cancel</button>';
             } else {
-              buttonHtml = `<button class="btn-taken" disabled>🔒 ${card.wanterName} wants this</button>`;
+              buttonHtml = '<button class="btn-taken" disabled>🔒 ' + (card.wanterName || 'Someone') + ' wants</button>';
             }
           } else {
-            buttonHtml = `
-              <button class="btn-want" onclick="wantCard('${card.card_id}', '${escapeQuotes(card.card_name)}', '${card.card_image}', '${escapeQuotes(card.card_set || '')}', ${user.id}, '${escapeQuotes(user.display_name)}')">
-                ❤️ I Want This
-              </button>
-            `;
+            buttonHtml = '<button class="btn-want" onclick="wantCard(\'' + card.card_id + '\', \'' + escapeQuotes(card.card_name) + '\', \'' + card.card_image + '\', \'' + escapeQuotes(card.card_set || '') + '\', ' + user.id + ')">❤️ I Want This</button>';
           }
-          
-          html += `
-            <div class="card-item ${card.isPending ? 'card-pending' : ''}">
-              <img src="${card.card_image}" alt="${card.card_name}"
-                   onerror="this.onerror=null; this.src='https://via.placeholder.com/200x280?text=Card'">
-              <h3>${card.card_name}</h3>
-              <p>${card.card_id}</p>
-              <div class="card-actions">
-                ${buttonHtml}
-              </div>
-            </div>
-          `;
-        }
-        html += `</div>`;
-      } else {
-        html += '<p class="empty-message">No cards available for trade yet.</p>';
+
+          friendsHaveHtml += '<div class="card-item' + (card.isPending ? ' card-pending' : '') + '">';
+          friendsHaveHtml += '<img src="' + card.card_image + '" alt="' + escapeQuotes(card.card_name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+          friendsHaveHtml += '<h3>' + card.card_name + '</h3>';
+          friendsHaveHtml += '<p class="card-rarity">' + (card.card_rarity || '') + '</p>';
+          friendsHaveHtml += '<p class="card-quantity">Qty: ' + (card.quantity || 1) + '</p>';
+          friendsHaveHtml += '<div class="card-actions">' + buttonHtml + '</div>';
+          friendsHaveHtml += '</div>';
+        });
+
+        friendsHaveHtml += '</div></div>';
       }
-      
-      html += '</div>';
+
+      // Cards this friend wants
+      if (wantedCards.length > 0) {
+        friendsWantHtml += '<div class="friend-section">';
+        friendsWantHtml += '<div class="friend-header"><h4>' + user.display_name + '</h4><span class="friend-card-count">' + wantedCards.length + ' wanted</span></div>';
+        friendsWantHtml += '<div class="card-grid">';
+
+        wantedCards.forEach(function(card) {
+          var iHaveIt = myCardIds.has(card.card_id);
+          var buttonHtml = '';
+
+          // Always show the same nice button - backend handles adding to collection if needed
+          buttonHtml = '<button class="btn-have-it" onclick="iHaveThis(\'' + card.card_id + '\', \'' + escapeQuotes(card.card_name) + '\', \'' + card.card_image + '\', \'' + escapeQuotes(card.card_set || '') + '\', \'' + escapeQuotes(card.card_rarity || '') + '\', ' + user.id + ')">' + (iHaveIt ? '🎁' : '📦') + ' I Have This!</button>';
+
+          friendsWantHtml += '<div class="card-item card-can-help">';
+          friendsWantHtml += '<img src="' + card.card_image + '" alt="' + escapeQuotes(card.card_name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+          friendsWantHtml += '<h3>' + card.card_name + '</h3>';
+          friendsWantHtml += '<p class="card-rarity">' + (card.card_rarity || '') + '</p>';
+          friendsWantHtml += '<p class="card-quantity">Qty: ' + (card.quantity || 1) + '</p>';
+          friendsWantHtml += '<div class="card-actions">' + buttonHtml + '</div>';
+          friendsWantHtml += '</div>';
+        });
+
+        friendsWantHtml += '</div></div>';
+      }
     }
-    
-    friendsDiv.innerHTML = html;
+
+    if (friendsHaveDiv) {
+      friendsHaveDiv.innerHTML = friendsHaveHtml || '<p class="empty-message">No friends have cards yet.</p>';
+    }
+    if (friendsWantDiv) {
+      friendsWantDiv.innerHTML = friendsWantHtml || '<p class="empty-message">No friends want cards yet.</p>';
+    }
+
   } catch (err) {
     console.error('Error loading friends cards:', err);
-    friendsDiv.innerHTML = '<p class="error">Error loading friends cards.</p>';
+    if (friendsHaveDiv) friendsHaveDiv.innerHTML = '<p class="error">Error loading friends\' cards</p>';
+    if (friendsWantDiv) friendsWantDiv.innerHTML = '<p class="error">Error loading friends\' cards</p>';
   }
 }
 
 // Want a card from a friend
-async function wantCard(cardId, cardName, cardImage, cardSet, friendId, friendName) {
+async function wantCard(cardId, cardName, cardImage, cardSet, friendId) {
   try {
-    const res = await fetch(`${API_URL}/api/cards/want`, {
+    var res = await fetch(API_URL + '/api/cards/want', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': 'Bearer ' + token
       },
       body: JSON.stringify({
-        cardId,
-        cardName,
-        cardImage,
-        cardSet,
-        friendId
+        cardId: cardId,
+        cardName: cardName,
+        cardImage: cardImage,
+        cardSet: cardSet,
+        friendId: friendId
       })
     });
 
-    const data = await res.json();
-
     if (res.ok) {
-      alert(`🎉 Match created! You want ${cardName} from ${friendName}. Check the Matches tab!`);
-      loadMatchCount();
+      loadFriendsCards();
+      loadMatches();
     } else {
-      alert(data.error || 'Failed to create match');
+      var data = await res.json();
+      alert(data.error || 'Failed to request card');
     }
   } catch (err) {
-    alert('Error creating match');
+    alert('Error requesting card');
+  }
+}
+
+// Cancel a want request
+async function cancelWant(cardId, friendId) {
+  if (!confirm('Cancel this want request?')) return;
+
+  try {
+    var res = await fetch(API_URL + '/api/matches/cancel-want', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        cardId: cardId,
+        friendId: friendId
+      })
+    });
+
+    // Just reload regardless of response - no alert needed
+    loadFriendsCards();
+    loadMatches();
+    loadMyCards();
+  } catch (err) {
+    // Silently reload
+    loadFriendsCards();
+    loadMatches();
+    loadMyCards();
+  }
+}
+
+// I have a card that a friend wants
+async function iHaveThis(cardId, cardName, cardImage, cardSet, cardRarity, friendId) {
+  try {
+    var res = await fetch(API_URL + '/api/cards/i-have', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        cardId: cardId,
+        cardName: cardName,
+        cardImage: cardImage,
+        cardSet: cardSet,
+        cardRarity: cardRarity,
+        friendId: friendId
+      })
+    });
+
+    if (res.ok) {
+      loadFriendsCards();
+      loadMatches();
+      loadMyCards();
+    } else {
+      var data = await res.json();
+      alert(data.error || 'Failed to notify friend');
+    }
+  } catch (err) {
+    alert('Error notifying friend');
   }
 }
 
 // Load matches
 async function loadMatches() {
+  var matchesDiv = document.getElementById('matches-list');
+  if (!matchesDiv) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/matches`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+    var res = await fetch(API_URL + '/api/matches', {
+      headers: { 'Authorization': 'Bearer ' + token }
     });
+    var matches = await res.json();
 
-    const matches = await res.json();
-    const matchesDiv = document.getElementById('matches-list');
+    if (!matches || matches.length === 0) {
+      matchesDiv.innerHTML = '<p class="empty-message">No matches yet.</p>';
+      return;
+    }
 
-    if (matches && matches.length > 0) {
-      matchesDiv.innerHTML = matches.map(match => `
-        <div class="match-item">
-          <div class="match-card">
-            <img src="${match.card_image}" alt="${match.card_name}"
-                 onerror="this.onerror=null; this.src='https://via.placeholder.com/100x140?text=${encodeURIComponent(match.card_name)}'">
-          </div>
-          <div class="match-info">
-            <h3>${match.card_name}</h3>
-            ${match.i_want_it 
-              ? `<p class="match-type want">❤️ You want this card</p>
-                 <p>📦 <strong>${match.other_user_name}</strong> has it!</p>`
-              : `<p class="match-type have">✅ You have this card</p>
-                 <p>❤️ <strong>${match.other_user_name}</strong> wants it!</p>`
-            }
-            <p class="match-date">Matched: ${new Date(match.created_at).toLocaleDateString()}</p>
-          </div>
-          <div class="match-actions">
-            <button class="btn-complete" onclick="completeMatch(${match.id})">✅ Trade Complete</button>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      matchesDiv.innerHTML = '<div class="empty-state"><span>🔄</span><p>No matches yet. Check your friends\' cards and mark ones you want!</p></div>';
+    var html = '<div class="card-grid">';
+    matches.forEach(function(match) {
+      var cardName = match.card_name || 'Unknown Card';
+      var cardImage = match.card_image || '';
+
+      html += '<div class="card-item">';
+      if (cardImage) {
+        html += '<img src="' + cardImage + '" alt="' + escapeQuotes(cardName) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+      }
+      html += '<h3>' + cardName + '</h3>';
+      html += '<p class="match-type ' + (match.i_want_it ? 'want' : 'have') + '">';
+      if (match.i_want_it) {
+        html += 'You want from ' + match.other_user_name;
+      } else {
+        html += match.other_user_name + ' wants this';
+      }
+      html += '</p>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    matchesDiv.innerHTML = html;
+
+    // Update badge
+    var badge = document.getElementById('match-count');
+    if (badge) {
+      if (matches.length > 0) {
+        badge.textContent = matches.length;
+        badge.style.display = 'inline';
+      } else {
+        badge.style.display = 'none';
+      }
     }
   } catch (err) {
     console.error('Error loading matches:', err);
+    matchesDiv.innerHTML = '<p class="error">Error loading matches</p>';
   }
 }
 
-// Complete a match
-async function completeMatch(matchId) {
-  if (!confirm('Mark this trade as complete? This will remove the match.')) return;
-  
+// Load possible trades
+async function loadPossibleTrades() {
+  var tradesDiv = document.getElementById('possible-trades-list');
+  if (!tradesDiv) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/matches/${matchId}/complete`, {
+    var res = await fetch(API_URL + '/api/trades/possible', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var trades = await res.json();
+
+    if (!trades || trades.length === 0) {
+      tradesDiv.innerHTML = '<p class="empty-message">No possible trades. Both you and a friend need to want each other\'s cards with matching rarity.</p>';
+      return;
+    }
+
+    var html = '<div class="trades-grid">';
+    trades.forEach(function(trade) {
+      html += '<div class="trade-card">';
+
+      html += '<div class="trade-side">';
+      html += '<span class="trade-label">You give:</span>';
+      html += '<img src="' + trade.myCard.image + '" alt="' + escapeQuotes(trade.myCard.name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+      html += '<p class="trade-card-name">' + trade.myCard.name + '</p>';
+      html += '<p class="trade-card-rarity">' + (trade.myCard.rarity || '') + '</p>';
+      html += '</div>';
+
+      html += '<div class="trade-arrow">⇄</div>';
+
+      html += '<div class="trade-side">';
+      html += '<span class="trade-label">You get:</span>';
+      html += '<img src="' + trade.theirCard.image + '" alt="' + escapeQuotes(trade.theirCard.name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+      html += '<p class="trade-card-name">' + trade.theirCard.name + '</p>';
+      html += '<p class="trade-card-rarity">' + (trade.theirCard.rarity || '') + '</p>';
+      html += '<p class="trade-owner">from ' + trade.theirCard.ownerName + '</p>';
+      html += '</div>';
+
+      html += '<button class="btn-propose" onclick="proposeTrade(\'' + trade.myCard.id + '\', \'' + trade.theirCard.id + '\', ' + trade.theirCard.ownerId + ')">Propose Trade</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    tradesDiv.innerHTML = html;
+  } catch (err) {
+    console.error('Error loading possible trades:', err);
+    tradesDiv.innerHTML = '<p class="error">Error loading trades</p>';
+  }
+}
+
+// Load pending trades
+async function loadPendingTrades() {
+  var pendingDiv = document.getElementById('pending-trades-list');
+  if (!pendingDiv) return;
+
+  try {
+    var res = await fetch(API_URL + '/api/trades/pending', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var trades = await res.json();
+
+    if (!trades || trades.length === 0) {
+      pendingDiv.innerHTML = '<p class="empty-message">No pending trades.</p>';
+      return;
+    }
+
+    var html = '<div class="trades-grid">';
+    trades.forEach(function(trade) {
+      html += '<div class="trade-card">';
+
+      html += '<div class="trade-side">';
+      html += '<span class="trade-label">You give:</span>';
+      if (trade.myCard.image) {
+        html += '<img src="' + trade.myCard.image + '" alt="' + escapeQuotes(trade.myCard.name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+      }
+      html += '<p class="trade-card-name">' + trade.myCard.name + '</p>';
+      html += '</div>';
+
+      html += '<div class="trade-arrow">⇄</div>';
+
+      html += '<div class="trade-side">';
+      html += '<span class="trade-label">You get:</span>';
+      if (trade.theirCard.image) {
+        html += '<img src="' + trade.theirCard.image + '" alt="' + escapeQuotes(trade.theirCard.name) + '" onerror="this.src=\'https://placehold.co/200x280?text=No+Image\'">';
+      }
+      html += '<p class="trade-card-name">' + trade.theirCard.name + '</p>';
+      html += '<p class="trade-owner">from ' + trade.otherUserName + '</p>';
+      html += '</div>';
+
+      html += '<div class="trade-actions-bottom">';
+      html += '<button class="btn-complete" onclick="completeTrade(' + trade.id + ')">✓ Complete</button>';
+      html += '<button class="btn-cancel" onclick="cancelTrade(' + trade.id + ')">✕ Cancel</button>';
+      html += '</div>';
+
+      html += '</div>';
+    });
+    html += '</div>';
+
+    pendingDiv.innerHTML = html;
+  } catch (err) {
+    console.error('Error loading pending trades:', err);
+    pendingDiv.innerHTML = '<p class="error">Error loading pending trades</p>';
+  }
+}
+
+// Propose a trade
+async function proposeTrade(myCardId, theirCardId, theirUserId) {
+  try {
+    var res = await fetch(API_URL + '/api/trades/propose', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        myCardId: myCardId,
+        theirCardId: theirCardId,
+        theirUserId: theirUserId
+      })
+    });
+
+    var data = await res.json();
+
+    if (res.ok) {
+      alert('Trade proposed!');
+      loadPossibleTrades();
+      loadPendingTrades();
+    } else {
+      alert(data.error || 'Failed to propose trade');
+    }
+  } catch (err) {
+    alert('Error proposing trade');
+  }
+}
+
+// Complete a trade
+async function completeTrade(tradeId) {
+  if (!confirm('Complete this trade? Cards will be removed from inventories.')) return;
+
+  try {
+    var res = await fetch(API_URL + '/api/trades/' + tradeId + '/complete', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
     });
 
     if (res.ok) {
+      alert('Trade completed!');
+      loadMyCards();
       loadMatches();
-      loadMatchCount();
-    }
-  } catch (err) {
-    alert('Error completing match');
-  }
-}
-
-// Load match count
-async function loadMatchCount() {
-  try {
-    const res = await fetch(`${API_URL}/api/matches`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    const matches = await res.json();
-    const badge = document.getElementById('match-count');
-
-    if (matches && matches.length > 0) {
-      badge.textContent = matches.length;
-      badge.style.display = 'inline';
+      loadPossibleTrades();
+      loadPendingTrades();
+      loadFriendsCards();
     } else {
-      badge.style.display = 'none';
+      var data = await res.json();
+      alert(data.error || 'Failed to complete trade');
     }
   } catch (err) {
-    console.error('Error loading match count:', err);
+    alert('Error completing trade');
   }
 }
 
-// Sync cards
-async function syncCards() {
-  if (!confirm('Sync card database with latest data from GitHub?')) return;
-  
+// Cancel a trade
+async function cancelTrade(tradeId) {
+  if (!confirm('Cancel this trade?')) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/tcgp/sync`, {
+    var res = await fetch(API_URL + '/api/trades/' + tradeId + '/cancel', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': 'Bearer ' + token }
     });
-    
-    const data = await res.json();
-    
+
     if (res.ok) {
-      alert(data.message);
-      loadExpansions();
-    } else {
-      alert('Sync failed: ' + (data.error || 'Unknown error'));
+      // Reload all relevant sections
+      loadPossibleTrades();
+      loadPendingTrades();
+      loadMatches();
     }
   } catch (err) {
-    alert('Sync error: ' + err.message);
+    console.error('Error cancelling trade:', err);
   }
 }

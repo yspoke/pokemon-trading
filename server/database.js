@@ -9,16 +9,18 @@ let db = null;
 
 async function initDatabase() {
   const SQL = await initSqlJs();
-  
+
   // Load existing database or create new one
   if (fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH);
     db = new SQL.Database(buffer);
+    console.log('Loaded existing database');
   } else {
     db = new SQL.Database();
+    console.log('Created new database');
   }
 
-  // Initialize tables
+  // Create tables
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,10 +39,11 @@ async function initDatabase() {
       card_name TEXT NOT NULL,
       card_image TEXT NOT NULL,
       card_set TEXT,
-      status TEXT CHECK(status IN ('available', 'wanted')) NOT NULL,
+      card_rarity TEXT,
+      status TEXT DEFAULT 'available',
+      quantity INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      UNIQUE(user_id, card_id, status)
+      FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
 
@@ -50,9 +53,28 @@ async function initDatabase() {
       user1_id INTEGER NOT NULL,
       user2_id INTEGER NOT NULL,
       user1_card_id TEXT NOT NULL,
-      user2_card_id TEXT NOT NULL,
+      user2_card_id TEXT,
       status TEXT DEFAULT 'pending',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user1_id) REFERENCES users(id),
+      FOREIGN KEY (user2_id) REFERENCES users(id)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS trades (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user1_id INTEGER NOT NULL,
+      user2_id INTEGER NOT NULL,
+      user1_card_id TEXT NOT NULL,
+      user1_card_name TEXT,
+      user1_card_image TEXT,
+      user2_card_id TEXT NOT NULL,
+      user2_card_name TEXT,
+      user2_card_image TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
       FOREIGN KEY (user1_id) REFERENCES users(id),
       FOREIGN KEY (user2_id) REFERENCES users(id)
     )
@@ -66,29 +88,44 @@ async function initDatabase() {
       match_id INTEGER,
       is_read INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id),
-      FOREIGN KEY (match_id) REFERENCES matches(id)
+      FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
 
   // Load predefined users
   const usersFile = path.join(__dirname, '..', 'users.json');
   if (fs.existsSync(usersFile)) {
-    const { users } = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+    const fileContent = fs.readFileSync(usersFile, 'utf8');
+    const { users } = JSON.parse(fileContent);
+    
+    console.log('Loading users from users.json...');
+    
     users.forEach(user => {
       try {
         db.run(
-          `INSERT OR IGNORE INTO users (username, password, display_name) VALUES (?, ?, ?)`,
-          [user.username, user.password, user.displayName]
+          `INSERT INTO users (username, password, display_name) VALUES (?, ?, ?)`,
+          [user.username.toLowerCase(), user.password, user.displayName]
         );
-      } catch (err) {
-        // User already exists, ignore
+        console.log('Created user:', user.username);
+      } catch (e) {
+        console.log('User already exists or error:', user.username, e.message);
       }
     });
-    console.log('Predefined users loaded');
+  } else {
+    console.log('users.json not found!');
   }
 
   saveDatabase();
+  
+  // Verify users were created
+  const stmt = db.prepare('SELECT id, username, display_name FROM users');
+  const allUsers = [];
+  while (stmt.step()) {
+    allUsers.push(stmt.getAsObject());
+  }
+  stmt.free();
+  console.log('Users in database:', allUsers);
+  
   return db;
 }
 
@@ -100,20 +137,15 @@ function saveDatabase() {
   }
 }
 
-function getDb() {
-  return db;
-}
-
-// Helper functions to match better-sqlite3 style
 function prepare(sql) {
   return {
     run: (...params) => {
       db.run(sql, params);
       saveDatabase();
-      const result = db.exec("SELECT last_insert_rowid() as id");
+      const lastId = db.exec("SELECT last_insert_rowid()");
       return { 
-        lastInsertRowid: result.length > 0 ? result[0].values[0][0] : 0,
-        changes: db.getRowsModified()
+        lastInsertRowid: lastId[0]?.values[0]?.[0], 
+        changes: db.getRowsModified() 
       };
     },
     get: (...params) => {
@@ -140,4 +172,4 @@ function prepare(sql) {
   };
 }
 
-module.exports = { initDatabase, getDb, prepare, saveDatabase };
+module.exports = { initDatabase, prepare, saveDatabase };

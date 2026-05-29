@@ -50,32 +50,40 @@ router.get('/id/:userId/cards', authenticateToken, (req, res) => {
       };
     });
 
+  const wanted = allCards.filter(c => c.status === 'wanted');
+
   res.json({ 
     user, 
-    available
+    available,
+    wanted
   });
 });
 
-// Get a user's cards by username (backup)
-router.get('/:username/cards', authenticateToken, (req, res) => {
-  const user = prepare(`
-    SELECT id, display_name FROM users WHERE LOWER(username) = LOWER(?)
-  `).get(req.params.username);
+// Get all friends' wanted cards
+router.get('/wanted-cards', authenticateToken, (req, res) => {
+  const currentUserId = req.user.id;
 
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
+  const wantedCards = prepare(`
+    SELECT uc.*, u.display_name as owner_name, u.id as owner_id
+    FROM user_cards uc
+    JOIN users u ON uc.user_id = u.id
+    WHERE uc.user_id != ? AND uc.status = 'wanted'
+    ORDER BY uc.created_at DESC
+  `).all(currentUserId);
 
-  const cards = prepare(`
-    SELECT * FROM user_cards WHERE user_id = ?
-  `).all(user.id);
+  // Check which cards the current user has
+  const myCards = prepare(`
+    SELECT card_id FROM user_cards WHERE user_id = ? AND status = 'available'
+  `).all(currentUserId);
 
-  const available = cards.filter(c => c.status === 'available');
+  const myCardIds = new Set(myCards.map(c => c.card_id));
 
-  res.json({ 
-    user, 
-    available
-  });
+  const cardsWithStatus = wantedCards.map(card => ({
+    ...card,
+    iHaveThis: myCardIds.has(card.card_id)
+  }));
+
+  res.json(cardsWithStatus);
 });
 
 module.exports = router;
