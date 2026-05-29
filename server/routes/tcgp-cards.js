@@ -81,11 +81,17 @@ router.get('/search', authenticateToken, (req, res) => {
   
   let results = cardsData;
 
-  // Filter by expansion
+  // Filter by expansion (exact match on prefix before the dash or exact set code)
   if (expansion) {
-    results = results.filter(card => 
-      card.id?.toLowerCase().startsWith(expansion.toLowerCase())
-    );
+    results = results.filter(card => {
+      if (!card.id) return false;
+      
+      // Get the expansion part of the card ID (everything before the dash)
+      const cardExpansion = card.id.split('-')[0];
+      
+      // Exact match on expansion code
+      return cardExpansion.toLowerCase() === expansion.toLowerCase();
+    });
   }
 
   // Filter by rarity
