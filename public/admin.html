@@ -155,6 +155,14 @@
     <button onclick="loadStats()">🔄 Refresh Stats</button>
   </div>
 
+  <h2>🔄 Card Database</h2>
+  <div class="card">
+    <p>Sync cards from the GitHub source to get the latest cards.</p>
+    <div id="sync-status"></div>
+    <button onclick="syncCards()">🔄 Sync Cards Now</button>
+    <button onclick="checkSyncStatus()">📊 Check Status</button>
+  </div>
+
   <h2>👥 User Management</h2>
   <div class="card">
     <h3>Current Users</h3>
@@ -219,6 +227,7 @@
     // Load everything on page load
     loadStats();
     loadUsers();
+    checkSyncStatus();
 
     async function loadStats() {
       try {
@@ -360,6 +369,47 @@
         showMessage('Failed to download backup', 'error');
       }
     }
+
+    async function syncCards() {
+      document.getElementById('sync-status').innerHTML = '<p>Syncing...</p>';
+      
+      try {
+        var res = await fetch('/api/tcgp/sync', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var result = await res.json();
+        
+        if (res.ok) {
+          showMessage(result.message || 'Cards synced!', 'success');
+          checkSyncStatus();
+        } else {
+          showMessage(result.error || 'Sync failed', 'error');
+        }
+      } catch (err) {
+        showMessage('Sync failed: ' + err.message, 'error');
+      }
+    }
+
+    async function checkSyncStatus() {
+      try {
+        var res = await fetch('/api/tcgp/status', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        var status = await res.json();
+        
+        var lastUpdated = status.lastUpdated ? new Date(status.lastUpdated).toLocaleString() : 'Never';
+        
+        document.getElementById('sync-status').innerHTML = `
+          <p><strong>Total Cards:</strong> ${status.totalCards}</p>
+          <p><strong>Total Expansions:</strong> ${status.totalExpansions}</p>
+          <p><strong>Last Updated:</strong> ${lastUpdated}</p>
+        `;
+      } catch (err) {
+        document.getElementById('sync-status').innerHTML = '<p>Failed to get status</p>';
+      }
+    }
+
 
     async function restoreBackup() {
       var fileInput = document.getElementById('restore-file');

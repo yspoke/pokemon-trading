@@ -68,10 +68,30 @@ async function initialize() {
     } catch (err) {
       console.error('Initial sync failed:', err.message);
     }
+  } else {
+    // Check if cache is older than 24 hours
+    try {
+      const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+      const lastUpdated = new Date(data.lastUpdated);
+      const hoursSinceUpdate = (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60);
+      
+      if (hoursSinceUpdate > 24) {
+        console.log('Cache is older than 24 hours, syncing...');
+        syncCards().catch(err => console.error('Auto-sync failed:', err.message));
+      }
+    } catch (err) {
+      // Ignore errors, just use cache
+    }
   }
 }
 
 initialize();
+
+// Auto-sync every 24 hours
+setInterval(() => {
+  console.log('Running scheduled card sync...');
+  syncCards().catch(err => console.error('Scheduled sync failed:', err.message));
+}, 24 * 60 * 60 * 1000);
 
 // Search cards with expansion AND rarity filters
 router.get('/search', authenticateToken, (req, res) => {
